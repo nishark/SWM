@@ -154,7 +154,11 @@ cor(u_rot, users[,-1], use = "pairwise")
 # LDA version
 cor(gamma, users[,-1], use = "pairwise")
 
-
+# to plot the correlation matrix
+install.packages("corrplot")
+library(corrplot)
+corrplot(x, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
 
 
 # You need to install ggplot2 and reshape2 packages first, run only once:
@@ -311,12 +315,6 @@ r <- cor(users$ope, pred_o)
 Mlda <- LDA(M[!test, ], control=list(alpha=1, delta=.1, seed=68), k=50, method="Gibbs")
 temp<-posterior(Mlda, M)
 gamma<-as.data.frame(temp$topics)
-
-
-
-
-
-
 
 #Load libraries
 require(Matrix)
