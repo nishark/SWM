@@ -1,0 +1,125 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+#Loading the data From Data-Frames
+
+users <- read.csv("sample_dataset/users.csv")
+likes <- read.csv("sample_dataset/likes.csv")
+ul <- read.csv("sample_dataset/users-likes.csv")
+```
+
+
+```{r}
+# Loading libraries
+require(Matrix)
+library(ROCR)
+library(topicmodels)
+library(irlba)
+
+# Constructing the matrix
+ul$user_row<-match(ul$userid,users$userid)
+ul$like_row<-match(ul$likeid,likes$likeid)
+
+# Trimming the Matrix
+while (T){
+  i<-sum(dim(M))
+  M<-M[rowSums(M)>=50, colSums(M)>=150]
+  if (sum(dim(M))==i) break
+}
+users <- users[match(rownames(M),users$userid), ]
+```
+
+
+```{r}
+#Loading 200 SVD dimensions 
+Msvd <- irlba(M[!test, ], nv = 200)
+```
+
+
+```{r}
+# Start predictions
+
+set.seed(seed=68)
+n_folds<-10                # set number of folds
+kvals<-c(10,60,90,120,140,160,180,200)                      # set k
+vars<-colnames(users)[-1]  # choose variables to predict
+
+folds <- sample(1:n_folds, size = nrow(users), replace = T)
+
+results<-list()
+accuracies<-c()
+
+for (k in kvals){
+  
+for (fold in 1:n_folds){ 
+  print(paste("Cross-validated predictions, fold:", fold))
+  test <- folds == fold
+  
+  # If you want to use SVD:
+  Msvd <- irlba(M[!test, ], nv = k)
+  v_rot <- unclass(varimax(Msvd$v[, 1:k])$loadings)
+  predictors <- as.data.frame(as.matrix(M %*% v_rot))
+
+  
+  for (var in vars){
+    print(var)
+    results[[var]]<-rep(NA, n = nrow(users))
+    # check if the variable is dichotomous
+    if (length(unique(na.omit(users[,var]))) ==2) {    
+      fit <- glm(users[,var]~., data = predictors, subset = !test, family = "binomial")
+      results[[var]][test] <- predict(fit, predictors[test, ], type = "response")
+    } else {
+      fit<-glm(users[,var]~., data = predictors, subset = !test)
+      results[[var]][test] <- predict(fit, predictors[test, ])
+    }
+    print(paste(" Variable", var, "done."))
+  }
+}
+
+compute_accuracy <- function(ground_truth, predicted){
+  if (length(unique(na.omit(ground_truth))) ==2) {
+    f<-which(!is.na(ground_truth))
+    temp <- prediction(predicted[f], ground_truth[f])
+    return(performance(temp,"auc")@y.values)
+  } else {return(cor(ground_truth, predicted,use = "pairwise"))}
+}
+
+for (var in vars) accuracies <- c(accuracies,compute_accuracy(users[,var], results[[var]]))
+
+}
+accuracies
+```
+
+
+```{r}
+traits <- c('Gender','Age','Political-Factor','Openness','Conscientiousness','Extroversion','Agreeableness','Neuroticism')
+#accuracies <- c(0.93,0.60,0.85,0.44,0.21,0.28,0.22,0.30,0.87,0.67,0.80,0.41,0.20,0.25,0.17,0.25)
+k <- c(10,10,10,10,10,10,10,10,60,60,60,60,60,60,60,60,90,90,90,90,90,90,90,90,120,120,120,120,120,120,120,120,140,140,140,140,140,140,140,140,160,160,160,160,160,160,160,160,180,180,180,180,180,180,180,180,200,200,200,200,200,200,200,200)
+names <- c("SVD","SVD","SVD","SVD","SVD","SVD","SVD","SVD","LDA","LDA","LDA","LDA","LDA","LDA","LDA","LDA")
+
+data_val<-data.frame(People_Personality_Traits=traits, accuracies=as.numeric(accuracies),k=k)
+
+# plot!
+ggplot(data_val,aes(x = People_Personality_Traits, y = accuracies, group = k, color = k)) + 
+    geom_line()+
+    theme_light() +
+    ggtitle("Predtion-Accuracy with Change in Dimensions")+
+    ylab(label="Reported Accuracies") + 
+    xlab("People_Personality_Traits")+       
+    geom_point()
+ggsave("test1.tiff", width = 30, height = 20 , units = "cm")
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
